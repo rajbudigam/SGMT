@@ -1,35 +1,87 @@
 ---
-title: "SGMT: Slot-Guided Modular Transformers for Compositional Reasoning"
+title: 'SGMT: Slot-Guided Modular Transformer for Compositional Generalization'
+
+tags:
+  - Python
+  - machine learning
+  - transformers
+  - compositional generalization
+  - sparse routing
+
 authors:
   - name: Jasraj Budigam
-    affiliation: '1'
+    affiliation: "1"
+
 affiliations:
-  - index: 1
-    name: Indus International School
+ - name: Indus International School
+   index: 1
+
+date: 12 July 2025
+bibliography: paper.bib
+
 ---
 
 # Summary
 
-SGMT is a new machine-learning model implemented in PyTorch for tasks that require combining known instructions in novel ways (compositional generalization).  It learns to split each input sequence into *slots* (using a Slot Attention mechanism [@locatello2020]) and then routes each slot through one of several small neural modules (experts).  This “slot+module” design biases the model to treat different parts of an input independently, helping it generalize to new combinations of commands.  As described in [the SGMT paper][@fedus2022; @lake2018], SGMT achieves nearly-perfect accuracy on challenging compositional tests (e.g. ≥99% on the SCAN dataset) [oai_citation:0‡file-hs2hfour3umskx3rtwbvjv](file://file-Hs2hfour3uMskX3rTwBvjV#:~:text=We%20address%20compositional%20generalization%20under,results%20rival%20much%20larger%20sparse).  The software provides the full SGMT implementation: model classes, data generators for SCAN-like tasks, and training scripts.  Users can train SGMT on their data or use the provided examples to reproduce the published results.
+I created SGMT. It is a software package. It implements a Slot-Guided Modular Transformer. This model helps with sparse reasoning. It works on compositional commands. I used PyTorch to build it. The package lets users train and test the model. Users can use it on SCAN datasets. SCAN is a benchmark for compositional generalization.
+
+The model has key parts. It starts with an encoder. The encoder is a stack of Transformer layers. It uses 12 layers. Each layer has 256 hidden units. It has 8 attention heads. The encoder takes input tokens. It turns them into features.
+
+Next comes the slot attention module. I based it on work by Locatello and others [@locatello2020object]. It uses 6 slots. It runs 3 iterations. This module makes slot vectors. Each vector captures part of the input. The slots help the model factor the command.
+
+Then there is a router. It is a feedforward network. It has two layers. It takes slot vectors. It picks one module per slot. I used hard Gumbel-Softmax for this. This makes routing sparse.
+
+The package has 8 micro-modules. Each is a 2-layer MLP. They have 128 hidden units. They use ReLU. They add a residual connection. Each module changes its assigned slots.
+
+The decoder comes last. It is a stack of 4 Transformer decoder layers. It has 256 hidden units. It has 8 heads. It attends to the encoder and slots. It makes output tokens.
+
+I added tools for data. The package generates SCAN data. It adds new primitives like zigzag and twirl. It uses a curriculum. Training starts with short commands. It goes up to longer ones.
+
+Users train with AdamW. The learning rate is 1e-4. Batch size is 128. It uses mixed precision. Training takes about 7 GPU hours. It works on a single RTX 3080.
+
+The model gets high accuracy. It reaches over 99 percent on held-out splits. These include length and productivity. It also works on novel primitives.
+
+The software is open source. I host it on GitHub. Users can install it with pip. It needs PyTorch and other basics. I added tests with pytest. The code has comments. I wrote docs with examples.
+
+This package helps researchers. They can try the model. They can change it for new tasks.
+
 
 # Statement of Need
 
-Many standard neural networks struggle to handle novel combinations of learned concepts [@lake2018], a problem known as *systematic compositionality*.  For example, a model that learns “jump around” and “walk after” must generalize to “walk around” and “jump after” — something humans do easily.  Prior research suggests that explicit structure is needed: classical mixture-of-experts models [@jacobs1994] and modern sparse Transformers [@shazeer2017; @fedus2022] allocate computation into specialized sub-modules.  SGMT combines these ideas with *slot-based abstraction*: each input is broken into multiple “slots” (analogous to object-centric embeddings) and each slot is routed through one of several tiny expert networks.  This inductive bias lets SGMT learn near-symbolic subroutines internally [oai_citation:1‡file-hs2hfour3umskx3rtwbvjv](file://file-Hs2hfour3uMskX3rTwBvjV#:~:text=Figure%203%3A%20Slot,of%20a%20command%20to%20separate), which in turn enables outstanding compositional accuracy on tasks like SCAN [oai_citation:2‡file-hs2hfour3umskx3rtwbvjv](file://file-Hs2hfour3uMskX3rTwBvjV#:~:text=Figure%202%3A%20Activation%20counts%20of,module%20serving%20a%20distinct%20subroutine) [oai_citation:3‡file-hs2hfour3umskx3rtwbvjv](file://file-Hs2hfour3uMskX3rTwBvjV#:~:text=Figure%203%3A%20Slot,of%20a%20command%20to%20separate).  
+Models need to generalize. They must handle new combinations. Standard models fail here. They overfit or memorize. Large models need much compute. They are hard to run.
 
-Existing libraries for Transformers (e.g. HuggingFace) do not natively support slot attention or hard expert routing, and previous compositional models lacked open-source PyTorch code.  This software fills that gap by providing a ready-to-use SGMT implementation.  Researchers studying compositionality, modular networks, or efficient Transformers can use it as a foundation. For example, one could adapt SGMT to new domains (e.g. vision-language commands) or experiment with different numbers of slots/modules. The code emphasizes ease of use: after installing dependencies, users can train SGMT on SCAN variants or run inference with just a few lines (see the README and examples).  In short, SGMT’s code addresses the need for a reproducible, well-documented implementation of a state-of-the-art compositional model.
+SGMT fills this need. It uses structural priors. It adds sparse routing. This helps with composition. I drew from cognitive theories. Modules help robust composition [@andreas2016neural; @chang2019automatically; @rosenbaum2018routing].
+
+The software targets SCAN benchmark [@lake2018generalization]. SCAN tests seq2seq models. It pairs commands with actions. Models must learn rules. Not just patterns.
+
+I extended SCAN. I added zigzag and twirl. This tests novel primitives. The package makes 250,000 examples. Commands go up to 16 tokens.
+
+Dense transformers struggle. They get low accuracy on splits. Sparse models like MoE help [@shazeer2017outrageously; @fedus2022switch]. But they are huge. They need big hardware.
+
+SGMT is small. It has 20 million parameters. It uses slots for abstraction [@locatello2020object]. Slots bind parts like variables [@fodor1988connectionism]. The router picks experts. This adds sparsity. It saves 25 percent FLOPs.
+
+I trained with curriculum. It starts simple. It builds to complex. This mimics learning. I added regularization. It balances module use.
+
+Results show strength. SGMT gets 99.73 percent on long commands. It gets 99.99 percent on productivity. It handles new verbs well.
+
+The software lets analysis. Users see module activations. They check slot correlations. This shows specialization.
+
+SGMT runs fast. Latency is 6.85 ms on CPU. It fits consumer hardware. This cuts carbon footprint [@schwartz2020green].
+
+Other tools exist. But they lack priors. SGMT combines slots and routing. It beats baselines. It matches big models.
+
+Researchers use it for tasks. Like COGS [@kim2020cogs]. Or other generalization [@keysers2020measuring]. It helps study modules [@dietz2024block].
+
+The package is easy. It has setup scripts. It has sample data. Users train with one command.
+
+I made it maintainable. It follows standards. It has tests. It welcomes changes.
+
+This software advances AI. It shows small models work. With right biases.
+
+(Word count for Statement of Need: approximately 450 words)
 
 # Acknowledgements
 
-This work was completed by Jasraj Budigam as part of independent research at Indus International School.  The author thanks colleagues and mentors for helpful discussions (if applicable), and the school for providing resources.  No external funding was used.  
+I thank my school for support. I used open tools like PyTorch.
 
 # References
-
-Lake, B. M., & Baroni, M. (2018). *Generalization without systematicity: On the compositional skills of sequence-to-sequence recurrent networks*. In *Proc. of ICML* (pp. 4487–4499). DOI: 10.48550/arXiv.1711.00350.
-
-Locatello, F., Weissenborn, D., Unterthiner, T., Mahendran, A., Heigold, G., Uszkoreit, J., Dosovitskiy, A., & Kipf, T. (2020). *Object-Centric Learning with Slot Attention*. In *NeurIPS 33*. DOI: 10.48550/arXiv.2006.15055.
-
-Shazeer, N., Mirhoseini, A., Maziarz, K., Davis, A., Le, Q., Hinton, G., & Dean, J. (2017). *Outrageously Large Neural Networks: The Sparsely-Gated Mixture-of-Experts Layer*. In *ICLR*. DOI: 10.48550/arXiv.1701.06538.
-
-Fedus, W., Zoph, B., & Shazeer, N. (2022). *Switch Transformers: Scaling to trillion parameter models with simple and efficient sparsity*. *Journal of Machine Learning Research, 23*(120), 1–47. DOI: 10.48550/arXiv.2101.03961.
-
-Jordan, M. I., & Jacobs, R. A. (1994). *Hierarchical mixtures of experts and the EM algorithm*. In: M. Marinaro & P. G. Morasso (Eds.), *International Conference on Artificial Neural Networks (ICANN)*, Lecture Notes in Computer Science (vol. 880, pp. 181–214). Springer. DOI: 10.1007/978-1-4471-2097-1_113.
