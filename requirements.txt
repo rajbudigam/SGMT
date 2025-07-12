@@ -1,0 +1,9 @@
+torch>=1.7
+einops
+sentencepiece
+tqdm
+matplotlib
+seaborn
+scikit-learn
+nbformat
+dill
