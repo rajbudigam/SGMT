@@ -3,7 +3,6 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from einops import rearrange
 
 class SlotAttention(nn.Module):
     def __init__(self, num_slots, dim, iters=3):
@@ -16,7 +15,11 @@ class SlotAttention(nn.Module):
         self.k_proj = nn.Linear(dim, dim)
         self.v_proj = nn.Linear(dim, dim)
         self.gru = nn.GRUCell(dim, dim)
-        self.mlp = nn.Sequential(nn.Linear(dim, dim), nn.ReLU(), nn.Linear(dim, dim))
+        self.mlp = nn.Sequential(
+            nn.Linear(dim, dim),
+            nn.ReLU(),
+            nn.Linear(dim, dim)
+        )
         self.norm_inputs = nn.LayerNorm(dim)
         self.norm_slots = nn.LayerNorm(dim)
         self.norm_mlp = nn.LayerNorm(dim)
@@ -28,7 +31,8 @@ class SlotAttention(nn.Module):
         slots = mu + sigma * torch.randn_like(mu)
 
         x = self.norm_inputs(x)
-        k, v = self.k_proj(x), self.v_proj(x)
+        k = self.k_proj(x)
+        v = self.v_proj(x)
 
         for _ in range(self.iters):
             slots_prev = slots
@@ -37,14 +41,26 @@ class SlotAttention(nn.Module):
             attn_logits = torch.einsum("bid,bjd->bij", q, k)
             attn = F.softmax(attn_logits, dim=1)
             updates = torch.einsum("bjd,bij->bid", v, attn)
-            slots = self.gru(updates.reshape(-1, D), slots_prev.reshape(-1, D))
+
+            slots = self.gru(
+                updates.reshape(-1, D),
+                slots_prev.reshape(-1, D)
+            )
             slots = slots.view(B, -1, D)
             slots = slots + self.mlp(self.norm_mlp(slots))
 
         return slots
 
 class SGMT(nn.Module):
-    def __init__(self, src_vocab, tgt_vocab, d_model=256, num_heads=8, num_slots=6, num_modules=8):
+    def __init__(
+        self,
+        src_vocab,
+        tgt_vocab,
+        d_model=256,
+        num_heads=8,
+        num_slots=6,
+        num_modules=8
+    ):
         super().__init__()
         self.src_vocab = src_vocab
         self.tgt_vocab = tgt_vocab
@@ -59,14 +75,18 @@ class SGMT(nn.Module):
         self.slot_attention = SlotAttention(num_slots=num_slots, dim=d_model)
 
         self.router = nn.Sequential(
-            nn.Linear(d_model, 512), nn.ReLU(),
+            nn.Linear(d_model, 512),
+            nn.ReLU(),
             nn.Linear(512, num_modules)
         )
 
-        self.num_slots = num_slots
-        self.num_modules = num_modules
-        self.modules = nn.ModuleList([
-            nn.Sequential(nn.Linear(d_model, d_model), nn.ReLU(), nn.Linear(d_model, d_model))
+        # Rename from `modules` to `expert_modules` to avoid name clash
+        self.expert_modules = nn.ModuleList([
+            nn.Sequential(
+                nn.Linear(d_model, d_model),
+                nn.ReLU(),
+                nn.Linear(d_model, d_model)
+            )
             for _ in range(num_modules)
         ])
 
@@ -77,33 +97,34 @@ class SGMT(nn.Module):
         self.out_proj = nn.Linear(d_model, len(tgt_vocab))
 
     def forward(self, src, tgt_in):
-        # Input token embeddings + positional encoding
+        # Token embeddings + positional encoding
         src_embed = self.src_tok(src) + self.pos_enc[:, :src.size(1), :]
         tgt_embed = self.tgt_tok(tgt_in) + self.pos_enc[:, :tgt_in.size(1), :]
 
         # Encode source
-        memory = self.encoder(src_embed.transpose(0, 1))  # (S, B, D)
-        memory = memory.transpose(0, 1)                   # (B, S, D)
+        memory = self.encoder(src_embed.transpose(0, 1)).transpose(0, 1)
 
         # Slot attention
-        slots = self.slot_attention(memory)               # (B, num_slots, D)
+        slots = self.slot_attention(memory)
 
-        # Route each slot through one module
+        # Routing
         B, S, D = slots.shape
-        routing_logits = self.router(slots)               # (B, S, num_modules)
-        routing_weights = F.gumbel_softmax(routing_logits, tau=1.0, hard=True, dim=-1)
+        routing_logits = self.router(slots)
+        routing_weights = F.gumbel_softmax(
+            routing_logits, tau=1.0, hard=True, dim=-1
+        )
 
+        # Apply expert modules
         routed = torch.zeros_like(slots)
-        for i, module in enumerate(self.modules):
-            mask = routing_weights[:, :, i].unsqueeze(-1)  # (B, S, 1)
-            routed += mask * module(slots)
+        for i, module in enumerate(self.expert_modules):
+            mask = routing_weights[:, :, i].unsqueeze(-1)
+            routed = routed + mask * module(slots)
 
-        # Decode with routed slots and memory
+        # Decode
         decoded = self.decoder(
             tgt_embed.transpose(0, 1),
-            memory.transpose(0, 1),
-            tgt_mask=None
+            memory.transpose(0, 1)
         ).transpose(0, 1)
 
-        out = self.out_proj(decoded)  # (B, T, V)
+        out = self.out_proj(decoded)
         return out, routing_weights
