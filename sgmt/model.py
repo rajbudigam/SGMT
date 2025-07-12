@@ -1,12 +1,10 @@
-#sgmt/model.py
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 class SlotAttention(nn.Module):
 def init(self, num_slots, dim, iters=3):
-super().init()
+super(SlotAttention, self).init()
 self.num_slots = num_slots
 self.iters = iters
 self.slot_mu = nn.Parameter(torch.randn(1, 1, dim))
@@ -30,9 +28,9 @@ def forward(self, x):
     sigma = F.softplus(self.slot_sigma).expand(B, self.num_slots, -1)
     slots = mu + sigma * torch.randn_like(mu)
 
-    x = self.norm_inputs(x)
-    k = self.k_proj(x)
-    v = self.v_proj(x)
+    x_norm = self.norm_inputs(x)
+    k = self.k_proj(x_norm)
+    v = self.v_proj(x_norm)
 
     for _ in range(self.iters):
         slots_prev = slots
@@ -42,28 +40,17 @@ def forward(self, x):
         attn = F.softmax(attn_logits, dim=1)
         updates = torch.einsum("bjd,bij->bid", v, attn)
 
-        slots = self.gru(
-            updates.reshape(-1, D),
-            slots_prev.reshape(-1, D)
-        )
-        slots = slots.view(B, -1, D)
+        slots_reshaped = slots_prev.view(-1, D)
+        updates_reshaped = updates.view(-1, D)
+        slots = self.gru(updates_reshaped, slots_reshaped)
+        slots = slots.view(B, self.num_slots, D)
         slots = slots + self.mlp(self.norm_mlp(slots))
 
     return slots
 
 class SGMT(nn.Module):
-def init(
-self,
-src_vocab,
-tgt_vocab,
-d_model=256,
-num_heads=8,
-num_slots=6,
-num_modules=8
-):
-super().init()
-self.src_vocab = src_vocab
-self.tgt_vocab = tgt_vocab
+def init(self, src_vocab, tgt_vocab, d_model=256, num_heads=8, num_slots=6, num_modules=8):
+super(SGMT, self).init()
 self.src_tok = nn.Embedding(len(src_vocab), d_model)
 self.tgt_tok = nn.Embedding(len(tgt_vocab), d_model)
 self.pos_enc = nn.Parameter(torch.randn(1, 128, d_model))
@@ -80,7 +67,6 @@ self.pos_enc = nn.Parameter(torch.randn(1, 128, d_model))
         nn.Linear(512, num_modules)
     )
 
-    # Use expert_modules to avoid conflict with nn.Module.modules()
     self.expert_modules = nn.ModuleList([
         nn.Sequential(
             nn.Linear(d_model, d_model),
@@ -107,12 +93,10 @@ def forward(self, src, tgt_in):
     # Slot attention
     slots = self.slot_attention(memory)
 
-    # Routing
+    # Router
     B, S, D = slots.shape
     routing_logits = self.router(slots)
-    routing_weights = F.gumbel_softmax(
-        routing_logits, tau=1.0, hard=True, dim=-1
-    )
+    routing_weights = F.gumbel_softmax(routing_logits, tau=1.0, hard=True, dim=-1)
 
     # Apply expert modules
     routed = torch.zeros_like(slots)
