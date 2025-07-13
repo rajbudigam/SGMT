@@ -1,6 +1,6 @@
 # SGMT
 
-**SGMT** (Slot-Guided Modular Transformer) is a PyTorch implementation of a Transformer architecture designed for **systematic compositional generalization**. SGMT breaks each input sequence into a small number of *slots* (using Slot Attention) and routes each slot through one of several tiny expert modules. This “slot + sparse module” design lets SGMT learn near-symbolic subroutines internally and achieve > 99 % token accuracy on challenging compositional benchmarks like SCAN—while using far fewer resources than large dense models.
+**SGMT** (Slot-Guided Modular Transformer) is a PyTorch implementation of a Transformer architecture designed for **systematic compositional generalization**. SGMT breaks each input sequence into a small number of *slots* (using Slot Attention) and routes each slot through one of several tiny expert modules. This “slot + sparse module” design lets SGMT learn near-symbolic subroutines internally and achieve > 99 % token accuracy on challenging compositional benchmarks like SCAN, while using far fewer resources than large dense models.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)  
 [![CI](https://github.com/rajbudigam/SGMT/actions/workflows/ci.yml/badge.svg)](https://github.com/rajbudigam/SGMT/actions)
